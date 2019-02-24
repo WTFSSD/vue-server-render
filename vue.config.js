@@ -3,8 +3,9 @@ const VueSSRClientPlugin = require('vue-server-renderer/client-plugin')
 const nodeExternals = require('webpack-node-externals')
 const merge = require('webpack-merge')
 const TARGET_NODE = process.env.WEBPACK_TARGET === 'node'
+const isDev = process.env.NODE_ENV !== 'production'
 const target = TARGET_NODE ? 'server' : 'client'
-
+console.log('vue config has been read!!!', isDev, target, TARGET_NODE)
 module.exports = {
     configureWebpack: () => ({
     // 将 entry 指向应用程序的 server / client 文件

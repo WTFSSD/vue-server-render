@@ -1,9 +1,13 @@
 const path = require('path')
 const MFS = require('memory-fs')
+const fs = require('fs')
 const webpack = require('webpack')
-process.env.WEBPACK_TARGET = 'node'
-const webpackConfig = require('@vue/cli-service/webpack.config')
 const Http = require('http')
+process.env.WEBPACK_TARGET = 'node'
+
+const VueSSRClientPlugin = require('vue-server-renderer/client-plugin')
+
+const webpackConfig = require('@vue/cli-service/webpack.config')
 /**
  * 读取文件配置
  * @param {Object} fs
@@ -29,32 +33,27 @@ module.exports = (server, templatePath, cb) => {
     let template = null
     let bundle
     let clientManifest
-    const readyPromise = new Promise((resolve, reject) =>  { ready = resolve })
+    const readyPromise = new Promise((resolve, reject) => { ready = resolve })
   
-    const clientHotReload = () => {
-        webpackConfig.entry.app = ['webpack-hot-middleware/client', webpackConfig.entry.app]
-        webpackConfig.plugins.push(
-            new webpack.HotModuleReplacementPlugin(),
-            new webpack.NoEmitOnErrorsPlugin()
-        )
-        const clientCompiler = webpack(webpackConfig)
-        const devMiddleware = require('webpack-dev-middleware')(clientCompiler, {
-            publicPath: webpackConfig.output.publicPath,
-            noInfo: true
+    const getClientManifest = () => {
+        let _resolve = null
+        const p = new Promise((resolve) => { _resolve = resolve })
+        Http.get('http://127.0.0.1:8081/vue-ssr-client-manifest.json', (res) => {
+            let body = ''
+            res.setEncoding('utf8')
+            res.on('data', (chunk) => {
+                body += chunk
+            })
+            res.on('end', () => {
+                try {
+                    clientManifest = JSON.parse(body)
+                    _resolve()
+                } catch (e) {
+                    console.error(e)
+                }
+            })
         })
-        server.use(devMiddleware)
-        server.use(require('webpack-hot-middleware')(clientCompiler, { heartbeat: 5000 }))
-        clientCompiler.plugin('done', stats => {
-            stats = stats.toJson()
-            stats.errors.forEach(err => console.error(err))
-            stats.warnings.forEach(err => console.warn(err))
-            if (stats.errors.length) return
-            clientManifest = JSON.parse(readFile(
-                devMiddleware.fileSystem,
-                'vue-ssr-client-manifest.json'
-            ))
-            update()
-        })
+        return p
     }
 
     const serverHotReload = () => {
@@ -62,39 +61,23 @@ module.exports = (server, templatePath, cb) => {
         serverCompiler.outputFileSystem = mfs
         serverCompiler.watch({}, (error, stats) => {
             if (error) return
-            stats = stats.toJson()
             try {
                 bundle = JSON.parse(readFile(
                     mfs,
                     'vue-ssr-server-bundle.json'
                 ))
-                Http.get('http://127.0.0.1:8082/vue-ssr-client-manifest.json', (res) => {
-                    res.setEncoding('utf8')
-                    let rawData = ''
-                    res.on('data', (chunk) => { rawData += chunk })
-                    res.on('end', () => {
-                        try {
-                            const parsedData = JSON.parse(rawData)
-                            clientManifest = parsedData
-                            update()
-                        } catch (e) {
-                          
-                        }
-                    })
-                })
+                update()
             } catch (e) { }
         })
     }
     const update = () => {
         if (bundle && clientManifest) {
             ready()
-            cb(bundle, clientManifest, template)
+            cb(bundle, clientManifest, template, mfs)
         }
     }
-    // template = fs.readFileSync(templatePath, 'utf-8')
+    template = fs.readFileSync(templatePath, 'utf-8')
 
-    // clientHotReload()
-
-    serverHotReload()
+    getClientManifest().then(serverHotReload)
     return readyPromise
 }
