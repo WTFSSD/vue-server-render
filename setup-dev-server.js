@@ -5,7 +5,7 @@ const webpack = require('webpack')
 const Http = require('http')
 process.env.WEBPACK_TARGET = 'node'
 
-const VueSSRClientPlugin = require('vue-server-renderer/client-plugin')
+// const VueSSRClientPlugin = require('vue-server-renderer/client-plugin')
 
 const webpackConfig = require('@vue/cli-service/webpack.config')
 /**
